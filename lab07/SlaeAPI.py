@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import copy
+import numba
 
 def fst_vec_norm(x: np.ndarray):
     return max(abs(x))

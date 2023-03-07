@@ -1,5 +1,5 @@
 .vscode
 .ipynb_checkpoints
-sandbox.ipynb
+sandbox.*
 tmp
 __pycache__
