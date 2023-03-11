@@ -1,96 +1,61 @@
-import numpy as np
 import matplotlib.pyplot as plt
-import SlaeAPI
+import sympy as smp
+from scipy.integrate import ode
 
-A = 1e3
-# A = 1e6
-B = 0.5
-C = 1
+y1, y2 =  smp.Symbol('y[0]'), smp.Symbol('y[1]')
+a, b, c = smp.Symbol('a'), smp.Symbol('b'), smp.Symbol('c')
 
-def f1(y1, y2):
-    return A * (-(y1**3 / 3 - y1) + y2)
+f1 = a*(-(y1**3/3 - y1) + y2)
+f2 = -y1 - b*y2 + c
 
-def f2(y1, y2):
-    return -y1 -B*y2 + C
+Y = smp.Matrix([f1, f2])
+X = smp.Matrix([y1, y2])
 
-def F(y):
-    y1 = y[0]
-    y2 = y[1]
-    return np.array([
-        f1(y1, y2),
-        f2(y1, y2)
-    ])
+# print('f1 =', f1)
+# print('f2 =', f2)
+# print('jacobian = ', Y.jacobian(X))
 
-# коэффициенты для трехстадийного метода Розенброка
-a  = 0.435866521508459
-p1 = 0.435866521508459
-p2 = 0.4782408332745185
-p3 = 0.0858926452170225 
-beta21 = 0.435866521508459
-beta31 = 0.435866521508459
-beta32 = -2.116053335949811
+def f(t, y, a, b, c):
+  return [a*(y[0] + y[1] - y[0]**3/3),
+          c - y[0] - b*y[1]]
 
-def J(yn, h):
-    y1n = yn[0]
-    y2n = yn[1]
+def jac(t, y, a, b, c):
+  return [[a*(1 - y[0]**2),  a],
+          [             -1, -b]]
 
-    df1dx1 = (f1(y1n + h, y2n) - f1(y1n - h, y2n)) / (2*h)
-    df1dx2 = (f1(y1n, y2n + h) - f1(y1n, y2n - h)) / (2*h)
-    df2dx1 = (f2(y1n + h, y2n) - f2(y1n - h, y2n)) / (2*h)
-    df2dx2 = (f2(y1n, y2n + h) - f2(y1n, y2n - h)) / (2*h)
+y01, y02 = 2., 0.
+a, b, c = 1000., 0.5, 1.0
 
-    res = np.array([
-        [df1dx1, df1dx2],
-        [df2dx1, df2dx2]
-    ])
-    return res
+r = ode(f, jac).set_integrator('vode', method='bdf', with_jacobian=True)
+r.set_initial_value((y01, y02)).set_f_params(a, b, c).set_jac_params(a, b, c)
 
-def Dn(yn, h):
-    E = np.eye(2)
-    return E + a * h * J(yn, h)
+t1, dt, t, y1, y2 = 100, 0.0001, [0.], [y01], [y02]
+while r.successful() and r.t < t1:
+    r.integrate(r.t + dt)
+    t.append(r.t)
+    y1.append(r.y[0])
+    y2.append(r.y[1])
 
-def Rozenbrok3Mthd(f, h, t_start, t_end, initial_solution: tuple):
-    t = np.linspace(t_start, t_end, int((t_end-t_start)/h+1))
-    solution = np.zeros((int((t_end-t_start)/h+1), 2))
-    solution[0] = initial_solution
-    
-    for i in range(len(t)-1):
-        # составляем СЛАУ
-        slae1 = SlaeAPI.Slae(Dn(solution[i], h), h*f(solution[i]))
-        #TODO np.linalg.solve(A, f) try
-        k1 = slae1.Gauss_mthd()
-        slae2 = SlaeAPI.Slae(Dn(solution[i], h), h*f(solution[i] + beta21*k1))
-        k2 = slae2.Gauss_mthd()
-        slae3 = SlaeAPI.Slae(Dn(solution[i], h), h*f(solution[i] + beta31*k1 + beta32*k2))
-        k3 = slae3.Gauss_mthd()
-        # получаем y_{n+1}
-        solution[i+1] = solution[i] + p1*k1 + p2*k2 + p3*k3
-    return solution
+fig = plt.figure(figsize=(13, 18))
 
-def main():
-    h = 0.001
-    init_sol = np.array([2, 0])
-    t_start = 0
-    t_end = 100
+splt1 = plt.subplot(3, 1, 1)
+plt.title("$y^{\prime}_1 = a (- (\\frac{y_1^3}{3} - y_1 ) + y_2),\, y^{\prime}_2 = - y_1 - b y_2 + c,\, a = %.2f,\, b = %.2f,\, c = %.2f,\, y1(0) = %.2f, \,y2(0)=%.2f$" % (a, b, c, y01, y02))
 
-    sol = Rozenbrok3Mthd(F, h, t_start, t_end, init_sol)
-    y1, y2 = sol.T
-    t = np.linspace(t_start, t_end, int((t_end-t_start)/h+1))
+plt.ylabel(r'$y_1$', {'fontsize': 18})
+plt.xlabel(r'$t$', {'fontsize': 18})
+plt.plot(t, y1)
+plt.grid(True)
 
-    fig = plt.figure(figsize=(16, 6))
+splt2 = plt.subplot(3, 1, 2)
+plt.ylabel(r'$y_2$', {'fontsize': 18})
+plt.xlabel(r'$t$', {'fontsize': 18})
+plt.grid(True)
+plt.plot(t, y2)
 
-    plt.subplot(1, 2, 1)
-    plt.plot(t, y2)
-    plt.title('Решение уравнения')
-    plt.xlabel('t')
-    plt.ylabel('y2')
+splt3 = plt.subplot(3, 1, 3)
+plt.ylabel(r'$y_2$', {'fontsize': 18})
+plt.xlabel(r'$y_1$', {'fontsize': 18})
+plt.grid(True)
+plt.plot(y1, y2)
 
-    plt.subplot(1, 2, 2)
-    plt.plot(y1, y2)
-    plt.title('Фазовая траектория')
-    plt.xlabel('y1')
-    plt.ylabel('y2')
-    fig.savefig("./image.jpg")
-
-if __name__ == '__main__':
-    main()
+plt.show()
